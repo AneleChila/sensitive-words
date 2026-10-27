@@ -1,0 +1,204 @@
+{
+  "info": {
+    "name": "Sensitive Words API - local demo",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Start the local profile first. Run requests in order. For production replace Basic authentication with appropriate JWT Bearer tokens."
+  },
+  "auth": {
+    "type": "basic",
+    "basic": [
+      {
+        "key": "username",
+        "value": "admin",
+        "type": "string"
+      },
+      {
+        "key": "password",
+        "value": "{{adminPassword}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "adminPassword",
+      "value": "admin-demo-only"
+    },
+    {
+      "key": "clientPassword",
+      "value": "client-demo-only"
+    },
+    {
+      "key": "wordId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1. List words",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/internal/v1/sensitive-words?size=10"
+      }
+    },
+    {
+      "name": "2. Create word (captures wordId)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/internal/v1/sensitive-words",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"value\": \"interview secret\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Created\", () => pm.response.to.have.status(201));",
+              "if (pm.response.code === 201) pm.collectionVariables.set(\"wordId\", pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Get word",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/internal/v1/sensitive-words/{{wordId}}"
+      }
+    },
+    {
+      "name": "4. Filter as client",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/messages/filter",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"message\": \"SELECT * FROM customers. Interview secret.\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "client",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{clientPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Filtered\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Update word",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/internal/v1/sensitive-words/{{wordId}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"value\": \"private phrase\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "6. Delete word",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": "{{baseUrl}}/api/internal/v1/sensitive-words/{{wordId}}"
+      }
+    },
+    {
+      "name": "7. Client cannot list dictionary",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/internal/v1/sensitive-words",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "client",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{clientPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Forbidden\", () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

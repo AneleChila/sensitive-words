@@ -59,7 +59,7 @@
         "url": "{{baseUrl}}/api/internal/v1/sensitive-words",
         "body": {
           "mode": "raw",
-          "raw": "{\"value\": \"interview secret\"}",
+          "raw": "{\"value\": \"restricted phrase\"}",
           "options": {
             "raw": {
               "language": "json"
@@ -101,7 +101,7 @@
         "url": "{{baseUrl}}/api/v1/messages/filter",
         "body": {
           "mode": "raw",
-          "raw": "{\"message\": \"SELECT * FROM customers. Interview secret.\"}",
+        "raw": "{\"message\": \"SELECT * FROM customers. Restricted phrase.\"}",
           "options": {
             "raw": {
               "language": "json"
@@ -167,7 +167,37 @@
       }
     },
     {
-      "name": "7. Client cannot list dictionary",
+      "name": "7. Import JSON dictionary file",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/api/internal/v1/sensitive-words/import",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": ""
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Imported\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Counts reconcile\", () => { const r = pm.response.json(); pm.expect(r.received).to.equal(r.inserted + r.skippedDuplicates); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Client cannot list dictionary",
       "request": {
         "method": "GET",
         "header": [],

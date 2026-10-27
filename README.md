@@ -1,96 +1,57 @@
 # Sensitive Words API
 
-Java 17 / Spring Boot 3.5 REST service for an interview assignment. Maintains a database-backed dictionary and masks sensitive terms in submitted chat messages. Includes all 228 supplied entries, including `SELECT * FROM`.
+Spring Boot 3.5 service for managing a normalized dictionary and masking configured terms. Production persistence is Microsoft SQL Server. Flyway creates the schema and seeds 228 terms once.
 
-## Run in two commands
+## Requirements and local use
 
-Install Java 17+. The included Maven Wrapper downloads Maven on first use (internet access required), or import `pom.xml` in IntelliJ and use its bundled Maven. On Windows use `mvnw.cmd` in place of `./mvnw`.
+Use Java 17. Docker with at least 2 GB available to SQL Server is required for the production-like setup and integration tests. Apple Silicon hosts may require `linux/amd64` emulation.
 
 ```bash
-./mvnw verify
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
-The download also includes a prebuilt JAR in `dist/`. To run without Maven: `java -jar dist/sensitivewords-1.0.0.jar --spring.profiles.active=local`.
+The `local` profile uses disposable H2 storage and HTTP Basic authentication. `admin`/`admin-demo-only` can manage and filter; `client`/`client-demo-only` can only filter. Override passwords with `LOCAL_ADMIN_PASSWORD` and `LOCAL_CLIENT_PASSWORD`.
 
-The explicit `local` profile uses a disposable H2 database and these demo users:
+Authenticated local users can open Swagger UI at `http://localhost:8080/swagger-ui.html` and generated JSON at `/v3/api-docs`. Both are disabled outside the local profile.
 
-| User | Password | Access |
-|---|---|---|
-| admin | admin-demo-only | Dictionary CRUD and filtering |
-| client | client-demo-only | Filtering only |
-
-Override with `LOCAL_ADMIN_PASSWORD` and `LOCAL_CLIENT_PASSWORD` if needed. The database resets on application restart in this profile; Flyway reloads the supplied list. Production uses PostgreSQL with durable storage and JWT authentication. **Never activate `local` outside your development machine.**
+## Microsoft SQL Server
 
 ```bash
-curl -u client:client-demo-only http://localhost:8080/api/v1/messages/filter \
-  -H 'Content-Type: application/json' \
-  -d '{"message":"SELECT * FROM customers; please DROP TABLE customers"}'
+cp .env.example .env
+# Set DB_PASSWORD, JWT_ISSUER, and JWT_AUDIENCE.
+docker compose up --build -d
+curl -f http://localhost:8080/actuator/health/readiness
 ```
 
-Response:
+Compose uses SQL Server 2022 Developer edition and accepts its license through `ACCEPT_EULA=Y`. Review Microsoft licensing before use. Connection settings come from `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD`; credentials are not committed.
 
-```json
-{"message":"****** * **** customers; please **** ***** customers"}
-```
-
-## Endpoints
-
-| Method | Path | Successful result | Production scope |
-|---|---|---|---|
-| POST | `/api/internal/v1/sensitive-words` | 201 + body and Location | `words.manage` |
-| GET | `/api/internal/v1/sensitive-words?page=0&size=20` | 200 + paginated list | `words.manage` |
-| GET | `/api/internal/v1/sensitive-words/{id}` | 200 + word | `words.manage` |
-| PUT | `/api/internal/v1/sensitive-words/{id}` | 200 + updated word | `words.manage` |
-| DELETE | `/api/internal/v1/sensitive-words/{id}` | 204, empty body | `words.manage` |
-| POST | `/api/v1/messages/filter` | 200 + amended message | `messages.filter` |
-| GET | `/actuator/health/liveness` | 200 while process is healthy | Public probe |
-| GET | `/actuator/health/readiness` | 200 when ready, 503 otherwise | Public probe |
-
-Word write payload: `{"value":"some sensitive phrase"}`. Word response: `{"id":"<uuid>","value":"SOME SENSITIVE PHRASE"}`. Create generates a UUID. PUT replaces an existing entry; it does not upsert. Missing IDs return 404; normalized duplicates return 409. Database uniqueness also covers concurrent create/update races. Simultaneous updates use JPA optimistic locking and return 409 if they conflict; sequential updates use last-write-wins.
-
-Pagination is zero-based, sorted by normalized value, with size 1–100. Invalid input returns 400; unauthenticated access 401; insufficient permissions 403. MVC errors use Problem Details; security-layer 401/403 responses may have no JSON body. Messages are required strings, at most 10,000 Java UTF-16 code units; empty strings are allowed. Words must be nonblank and at most 255 code units before and after normalization.
+## API examples
 
 ```bash
-# Add a word. Copy the returned id for the remaining requests.
-curl -i -u admin:admin-demo-only http://localhost:8080/api/internal/v1/sensitive-words \
-  -H 'Content-Type: application/json' -d '{"value":"secret"}'
-curl -u admin:admin-demo-only 'http://localhost:8080/api/internal/v1/sensitive-words?size=5'
-curl -u admin:admin-demo-only http://localhost:8080/api/internal/v1/sensitive-words/REPLACE_WITH_ID
-curl -X PUT -u admin:admin-demo-only http://localhost:8080/api/internal/v1/sensitive-words/REPLACE_WITH_ID \
-  -H 'Content-Type: application/json' -d '{"value":"private phrase"}'
-curl -X DELETE -u admin:admin-demo-only http://localhost:8080/api/internal/v1/sensitive-words/REPLACE_WITH_ID
+curl -u client:client-demo-only -H 'Content-Type: application/json' \
+  -d '{"message":"SELECT * FROM customers"}' http://localhost:8080/api/v1/messages/filter
+curl -u admin:admin-demo-only -H 'Content-Type: application/json' \
+  -d '{"value":"private phrase"}' http://localhost:8080/api/internal/v1/sensitive-words
+printf '["CREATE","DROP","SELECT * FROM"]' >/tmp/words.txt
+curl -u admin:admin-demo-only -F 'file=@/tmp/words.txt;type=application/json' \
+  http://localhost:8080/api/internal/v1/sensitive-words/import
 ```
 
-An importable Postman collection is in `docs/SensitiveWords.postman_collection.json`; the OpenAPI contract is in `docs/openapi.yaml`.
+CRUD and import require `words.manage` in production. Filtering requires `messages.filter`. Production uses JWT Bearer authentication. Imports accept a UTF-8 JSON array of strings, are atomic, and are limited to 1 MiB and 10,000 entries.
 
-## Matching decisions and ambiguities
+## Behavior and architecture
 
-The brief leaves matching semantics open. These are explicit implementation assumptions:
+Controllers validate HTTP input. Services own transactions and dictionary rules. `TermNormalizer` trims, collapses Unicode whitespace, and applies locale-independent uppercase normalization. JPA persists normalized terms with a unique constraint. `MessageMasker` performs literal, case-insensitive whole-word matching independently of persistence.
 
-* Match case-insensitively using Java Unicode case matching. Dictionary writes trim surrounding whitespace, collapse whitespace to one space, and uppercase using `Locale.ROOT`; the message itself is never normalized.
-* Match complete terms, not substrings inside identifiers or words. Unicode letters, combining marks, digits and underscore count as word characters. `DROP` matches `drop!` but not `dropdown`, `MY_DROP` or `DROP2`.
-* Prefer the longest term at a shared starting position. Matching scans left to right, taking non-overlapping matches. Regex metacharacters in entries are quoted and treated literally.
-* Phrase spaces match one or more Unicode whitespace characters, including newlines. Preserve the original whitespace, punctuation outside a match, and all unmatched text. Replace each non-whitespace Unicode code point within a match with one `*`.
-* `SELECT * FROM` becomes `****** * ****`. The PDF's shorter sample leaves `FROM` visible, but its supplied list explicitly includes the full phrase; this solution masks the phrase. Confirm this assumption with the interviewer if they expect the sample literally.
-* No stemming, fuzzy matching, accent folding, Unicode compatibility normalization, or evasion detection. A Unicode case match is not a full linguistic equivalence algorithm. This is configurable content masking, not SQL injection prevention; database access still uses bound parameters through JPA.
+Unicode letters, marks, digits, and underscore are word characters. Phrase whitespace matches one or more Unicode whitespace characters. Longer terms win at the same position. Unmatched text is preserved. `SELECT * FROM` becomes `****** * ****`. Messages are not stored or intentionally logged. Database failures fail filtering rather than returning unfiltered content.
 
-## Design
+## Tests
 
-Controllers validate requests and map DTOs; transactional services enforce dictionary rules; Spring Data JPA persists entries. `MessageMasker` is a pure component and has no database dependency. Flyway creates the schema and seeds the supplied list once per database, so deleted seed entries are not silently resurrected on restart. The original JSON-format list is retained in `docs/sql_sensitive_list.txt`.
+```bash
+./mvnw verify
+./mvnw -Pmssql-it verify
+```
 
-Each filtering request reads one committed dictionary snapshot via one database SELECT, then builds a literal longest-first regex. This keeps all replicas consistent with committed CRUD updates without cache invalidation. A request concurrent with an update may use the previous committed snapshot. A DB failure fails the filter request; the service does not silently return unfiltered text. Chat messages are neither stored nor explicitly logged, including rejected validation values.
+The first command runs unit and H2-backed HTTP tests. The second starts actual SQL Server with Testcontainers and requires Docker. Reports are under `target/surefire-reports`, `target/failsafe-reports`, and `target/site/jacoco`.
 
-For 228 entries this intentionally favors clarity. Regex construction and database reads happen per request and are not performance-tested. For a large dictionary or sustained high throughput, benchmark compiled immutable snapshots or an Aho–Corasick matcher; use a dictionary version and cross-replica invalidation with a defined freshness bound. Limit dictionary size/term length and filter request rate at the platform boundary. Authentication identifies callers; this version has one shared company dictionary, not tenant isolation.
-
-## Verification
-
-`mvn verify` runs pure matcher tests and full HTTP/DB tests with H2 in PostgreSQL compatibility mode, including Flyway. Tests cover CRUD-to-filter propagation, duplicates, validation, phrase priority, literal regex characters, Unicode boundaries, pagination and authorization. Production JWT routing has separate tests with a stub decoder; the identity provider remains an environment integration to validate.
-
-H2 does not prove PostgreSQL compatibility. Before a real rollout run the PostgreSQL smoke procedure in `docs/DEPLOYMENT.md`, exercise your actual identity provider, and load-test representative data. Docker and PostgreSQL are not prerequisites for the local demo.
-
-## Production
-
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the deployment walkthrough, configuration, security boundaries, CI/CD, migration, scaling, monitoring and rollback. Nothing is deployed by this project.
-
-Reference documentation: [Spring Boot requirements](https://docs.spring.io/spring-boot/3.5/system-requirements.html), [Spring Security JWT resource server](https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/jwt.html).
+See [deployment](docs/DEPLOYMENT.md), [validation](docs/VALIDATION.md), [performance](docs/PERFORMANCE.md), and the [Postman collection](docs/SensitiveWords.postman_collection.json).

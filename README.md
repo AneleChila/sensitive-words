@@ -27,6 +27,8 @@ Compose uses SQL Server 2022 Developer edition and accepts its license through `
 
 ## API examples
 
+These examples use the `local` profile and its demo credentials. The Compose setup uses JWT authentication; supply a token from your configured issuer for those requests.
+
 ```bash
 curl -u client:client-demo-only -H 'Content-Type: application/json' \
   -d '{"message":"SELECT * FROM customers"}' http://localhost:8080/api/v1/messages/filter
@@ -38,6 +40,15 @@ curl -u admin:admin-demo-only -F 'file=@/tmp/words.txt;type=application/json' \
 ```
 
 CRUD and import require `words.manage` in production. Filtering requires `messages.filter`. Production uses JWT Bearer authentication. Imports accept a UTF-8 JSON array of strings, are atomic, and are limited to 1 MiB and 10,000 entries.
+
+## Postman collection
+
+1. Import `docs/SensitiveWords.postman_collection.json` into Postman.
+2. Set `baseUrl` to the running API, for example `http://localhost:8080` for the local profile. Set the password variables if demo passwords were overridden.
+3. In **Import JSON dictionary file**, select `docs/sql_sensitive_list.txt` for the multipart `file` field; local file paths are not embedded in the collection.
+4. Run all eight requests in order. The create request captures `wordId`, which subsequent requests use. Assertions check status codes, normalized values, filtering output, deletion and import counts. The collection expects the demo terms `restricted phrase` and `private phrase` to be available for creation/update.
+
+For a JWT-authenticated instance, set the collection authorization to a management token and replace the explicit Basic authentication on the filtering and restricted-client requests with suitable client tokens. Do not change production authentication to run the collection.
 
 ## Behavior and architecture
 
@@ -55,3 +66,10 @@ Unicode letters, marks, digits, and underscore are word characters. Phrase white
 The first command runs unit and H2-backed HTTP tests. The second starts actual SQL Server with Testcontainers and requires Docker. Reports are under `target/surefire-reports`, `target/failsafe-reports`, and `target/site/jacoco`.
 
 See [deployment](docs/DEPLOYMENT.md), [validation](docs/VALIDATION.md), [performance](docs/PERFORMANCE.md), and the [Postman collection](docs/SensitiveWords.postman_collection.json).
+
+## Further improvements
+
+- Add an audit trail for dictionary changes, recording actor, operation, entry identifier and time without storing submitted chat messages.
+- Add request correlation, latency/error metrics and alerts for database availability and connection-pool saturation.
+- If the service needs separate dictionaries for multiple organizations, bind tenant identity to management and filtering queries and add tenant-isolation tests.
+- Evaluate matcher caching and insert batching using the workload in the performance notes before adding operational complexity.

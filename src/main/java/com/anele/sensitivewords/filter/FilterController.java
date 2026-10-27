@@ -3,9 +3,14 @@ package com.anele.sensitivewords.filter;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.*;
+import io.swagger.v3.oas.annotations.responses.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
 @RequestMapping("/api/v1/messages")
+@Tag(name = "Message filtering", description = "External message sanitization operations")
 public class FilterController {
     private final FilterService service;
     public FilterController(FilterService service) { this.service = service; }
@@ -13,6 +18,12 @@ public class FilterController {
     public record FilterResponse(String message) {}
 
     @PostMapping("/filter")
+    @Operation(summary = "Filter a message", description = "Masks configured terms at whole-word boundaries. Requires messages.filter.")
+    @ApiResponses({@ApiResponse(responseCode = "200", description = "Filtered message",
+        content = @Content(examples = @ExampleObject(value = "{\"message\":\"You need to ****** a string\"}"))),
+        @ApiResponse(responseCode = "400", description = "Invalid message"),
+        @ApiResponse(responseCode = "401", description = "Authentication required"),
+        @ApiResponse(responseCode = "403", description = "Required scope missing")})
     public FilterResponse filter(@Valid @RequestBody FilterRequest request) {
         return new FilterResponse(service.filter(request.message()));
     }

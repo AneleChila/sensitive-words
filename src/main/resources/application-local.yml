@@ -10,3 +10,8 @@ app:
     audience: sensitivewords-api
     admin-password: ${LOCAL_ADMIN_PASSWORD:admin-demo-only}
     client-password: ${LOCAL_CLIENT_PASSWORD:client-demo-only}
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true

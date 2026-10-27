@@ -44,3 +44,8 @@ app:
   security:
     issuer: ${JWT_ISSUER}
     audience: ${JWT_AUDIENCE:sensitivewords-api}
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

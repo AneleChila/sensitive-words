@@ -22,6 +22,8 @@ public class SecurityConfig {
     @Bean
     @Profile("local")
     SecurityFilterChain localSecurity(HttpSecurity http) throws Exception {
+        http.authorizeHttpRequests(auth -> auth
+            .requestMatchers("/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**").authenticated());
         return common(http).httpBasic(Customizer.withDefaults()).build();
     }
     @Bean

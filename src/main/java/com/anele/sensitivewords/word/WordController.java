@@ -35,6 +35,9 @@ public class WordController {
     @ApiResponses({@ApiResponse(responseCode = "200", description = "Import counts",
         content = @Content(examples = @ExampleObject(value = "{\"received\":3,\"inserted\":2,\"skippedDuplicates\":1}"))),
         @ApiResponse(responseCode = "400", description = "Invalid JSON or term"),
+        @ApiResponse(responseCode = "401", description = "Authentication required"),
+        @ApiResponse(responseCode = "403", description = "Required scope missing"),
+        @ApiResponse(responseCode = "409", description = "Concurrent dictionary write conflicts with the import; no entries imported"),
         @ApiResponse(responseCode = "413", description = "File exceeds 1 MiB"),
         @ApiResponse(responseCode = "415", description = "Unsupported media type")})
     public ImportService.ImportResult importWords(@Parameter(description = "UTF-8 JSON array file; maximum 1 MiB")
@@ -45,7 +48,9 @@ public class WordController {
     @GetMapping
     @Operation(summary = "List dictionary terms", description = "Returns normalized terms sorted by value. Page size is 1 to 100.")
     @ApiResponses({@ApiResponse(responseCode = "200", description = "Page returned"), @ApiResponse(responseCode = "400", description = "Invalid pagination"), @ApiResponse(responseCode = "401", description = "Authentication required"), @ApiResponse(responseCode = "403", description = "Required scope missing")})
-    public WordPage list(@RequestParam(defaultValue = "0") @Min(0) int page,
+    public WordPage list(@Parameter(description = "Zero-based page number", example = "0")
+                         @RequestParam(defaultValue = "0") @Min(0) int page,
+                         @Parameter(description = "Number of entries per page, from 1 to 100", example = "20")
                          @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         var result = service.list(page, size);
         return new WordPage(result.map(WordResponse::from).getContent(), page, size,

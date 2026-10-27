@@ -14,6 +14,7 @@ import org.springframework.web.server.ResponseStatusException;
 public class ImportService {
     static final long MAX_BYTES = 1024 * 1024;
     static final int MAX_ENTRIES = 10_000;
+    static final int LOOKUP_BATCH_SIZE = 1_000;
     private final ObjectMapper mapper;
     private final TermNormalizer normalizer;
     private final SensitiveWordRepository repository;
@@ -31,7 +32,12 @@ public class ImportService {
         if (inputs.size() > MAX_ENTRIES) throw bad("Import file must contain at most 10000 entries");
         LinkedHashSet<String> unique = new LinkedHashSet<>();
         for (String input : inputs) unique.add(normalizer.normalize(input));
-        Set<String> existing = repository.findValuesIn(unique);
+        Set<String> existing = new HashSet<>();
+        List<String> normalized = new ArrayList<>(unique);
+        for (int start = 0; start < normalized.size(); start += LOOKUP_BATCH_SIZE) {
+            existing.addAll(repository.findValuesIn(normalized.subList(start,
+                Math.min(start + LOOKUP_BATCH_SIZE, normalized.size()))));
+        }
         List<SensitiveWord> additions = unique.stream().filter(value -> !existing.contains(value))
             .map(SensitiveWord::new).toList();
         repository.saveAll(additions);

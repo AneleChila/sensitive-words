@@ -92,6 +92,18 @@ class ApiIntegrationTest {
             .andExpect(status().isBadRequest());
         filter("rollbackmarker").andExpect(jsonPath("$.message").value("rollbackmarker"));
     }
+    @Test void importAboveSqlServerParameterLimitUsesBoundedLookups() throws Exception {
+        StringBuilder json = new StringBuilder("[");
+        for (int index = 0; index < 2_501; index++) {
+            if (index > 0) json.append(',');
+            json.append('"').append("BULKMARKER").append(index).append('"');
+        }
+        json.append(",\" bulkmarker0 \"]");
+        var file = new MockMultipartFile("file", "bulk.txt", "application/json", json.toString().getBytes());
+        mvc.perform(multipart(WORDS + "/import").file(file).with(httpBasic("admin", "admin-demo-only")))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.received").value(2_502))
+            .andExpect(jsonPath("$.inserted").value(2_501)).andExpect(jsonPath("$.skippedDuplicates").value(1));
+    }
     @Test void internalEndpointsAreRestricted() throws Exception {
         mvc.perform(get(WORDS)).andExpect(status().isUnauthorized());
         mvc.perform(get(WORDS).with(httpBasic("client", "client-demo-only")))

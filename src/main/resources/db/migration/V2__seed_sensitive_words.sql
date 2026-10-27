@@ -1,4 +1,4 @@
--- Immutable one-time seed from the supplied interview list.
+-- Immutable one-time seed from the supplied dictionary.
 INSERT INTO sensitive_word (id, term_value, version) VALUES ('1e1dcf18-b151-5581-a09c-7f70f6f1e325', 'ACTION', 0);
 INSERT INTO sensitive_word (id, term_value, version) VALUES ('f5a16a80-161a-5ed4-81bc-f9933e3771aa', 'ADD', 0);
 INSERT INTO sensitive_word (id, term_value, version) VALUES ('4fb4b6ef-c36e-5d44-985f-1b6775f607da', 'ALL', 0);

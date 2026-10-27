@@ -1,0 +1,17 @@
+# Explicit opt-in only: disposable local database and demo credentials.
+spring:
+  datasource:
+    url: jdbc:h2:mem:sensitivewords;MODE=MSSQLServer;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+app:
+  security:
+    issuer: unused-in-local
+    audience: sensitivewords-api
+    admin-password: ${LOCAL_ADMIN_PASSWORD:admin-demo-only}
+    client-password: ${LOCAL_CLIENT_PASSWORD:client-demo-only}
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true

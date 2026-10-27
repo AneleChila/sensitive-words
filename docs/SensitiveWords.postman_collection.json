@@ -44,7 +44,19 @@
         "method": "GET",
         "header": [],
         "url": "{{baseUrl}}/api/internal/v1/sensitive-words?size=10"
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"List returns 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"List contains a bounded page\", () => { const r=pm.response.json(); pm.expect(r.content).to.be.an(\"array\"); pm.expect(r.content.length).to.be.at.most(10); pm.expect(r.page).to.equal(0); pm.expect(r.size).to.equal(10); });"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "2. Create word (captures wordId)",
@@ -74,6 +86,8 @@
             "type": "text/javascript",
             "exec": [
               "pm.test(\"Created\", () => pm.response.to.have.status(201));",
+              "pm.test(\"Created term has an identifier and normalized value\", () => { const r=pm.response.json(); pm.expect(r.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i); pm.expect(r.value).to.equal(\"RESTRICTED PHRASE\"); });",
+              "pm.test(\"Location identifies the created term\", () => pm.expect(pm.response.headers.get(\"Location\")).to.equal(\"/api/internal/v1/sensitive-words/\" + pm.response.json().id));",
               "if (pm.response.code === 201) pm.collectionVariables.set(\"wordId\", pm.response.json().id);"
             ]
           }
@@ -86,7 +100,19 @@
         "method": "GET",
         "header": [],
         "url": "{{baseUrl}}/api/internal/v1/sensitive-words/{{wordId}}"
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Get returns 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Retrieved term matches the created entry\", () => { const r=pm.response.json(); pm.expect(r.id).to.equal(pm.collectionVariables.get(\"wordId\")); pm.expect(r.value).to.equal(\"RESTRICTED PHRASE\"); });"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "4. Filter as client",
@@ -101,7 +127,7 @@
         "url": "{{baseUrl}}/api/v1/messages/filter",
         "body": {
           "mode": "raw",
-        "raw": "{\"message\": \"SELECT * FROM customers. Restricted phrase.\"}",
+          "raw": "{\"message\": \"SELECT * FROM customers. Restricted phrase.\"}",
           "options": {
             "raw": {
               "language": "json"
@@ -130,7 +156,8 @@
           "script": {
             "type": "text/javascript",
             "exec": [
-              "pm.test(\"Filtered\", () => pm.response.to.have.status(200));"
+              "pm.test(\"Filtered\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Sensitive words and phrases are masked\", () => pm.expect(pm.response.json().message).to.equal(\"****** * **** customers. ********** ******.\"));"
             ]
           }
         }
@@ -156,7 +183,19 @@
             }
           }
         }
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Update returns 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Update retains the identifier and normalizes the value\", () => { const r=pm.response.json(); pm.expect(r.id).to.equal(pm.collectionVariables.get(\"wordId\")); pm.expect(r.value).to.equal(\"PRIVATE PHRASE\"); });"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "6. Delete word",
@@ -164,7 +203,19 @@
         "method": "DELETE",
         "header": [],
         "url": "{{baseUrl}}/api/internal/v1/sensitive-words/{{wordId}}"
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Delete returns 204\", () => pm.response.to.have.status(204));",
+              "pm.test(\"Delete response has no body\", () => pm.expect(pm.response.text()).to.equal(\"\"));"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "7. Import JSON dictionary file",
@@ -190,7 +241,8 @@
             "type": "text/javascript",
             "exec": [
               "pm.test(\"Imported\", () => pm.response.to.have.status(200));",
-              "pm.test(\"Counts reconcile\", () => { const r = pm.response.json(); pm.expect(r.received).to.equal(r.inserted + r.skippedDuplicates); });"
+              "pm.test(\"Counts reconcile\", () => { const r=pm.response.json(); pm.expect(r.received).to.equal(r.inserted + r.skippedDuplicates); });",
+              "pm.test(\"Import counts are nonnegative integers\", () => { const r=pm.response.json(); [r.received,r.inserted,r.skippedDuplicates].forEach(n => { pm.expect(Number.isInteger(n)).to.equal(true); pm.expect(n).to.be.at.least(0); }); });"
             ]
           }
         }

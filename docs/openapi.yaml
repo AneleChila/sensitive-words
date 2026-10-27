@@ -1,0 +1,193 @@
+openapi: 3.0.3
+info:
+  title: Sensitive Words API
+  version: 1.0.0
+  description: Database-backed literal word and phrase masking. See README for matching semantics.
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/messages/filter:
+    post:
+      summary: Mask sensitive terms in a message
+      description: Requires messages.filter scope. Empty messages are accepted.
+      operationId: filterMessage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+                  maxLength: 10000
+                  example: SELECT * FROM customers
+      responses:
+        '200':
+          description: Amended message
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message:
+                    type: string
+                    example: '****** * **** customers'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          description: Filtering failed; do not display the original unfiltered message
+  /api/internal/v1/sensitive-words:
+    get:
+      summary: List dictionary entries sorted by value
+      description: Requires words.manage scope; private ingress only in production.
+      operationId: listWords
+      parameters:
+        - in: query
+          name: page
+          schema: {type: integer, minimum: 0, default: 0}
+        - in: query
+          name: size
+          schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+      responses:
+        '200':
+          description: Paginated dictionary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content:
+                    type: array
+                    items: {$ref: '#/components/schemas/Word'}
+                  page: {type: integer}
+                  size: {type: integer}
+                  totalElements: {type: integer, format: int64}
+                  totalPages: {type: integer}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      summary: Create a sensitive term
+      description: Requires words.manage scope. Values are whitespace-normalized and uppercased.
+      operationId: createWord
+      requestBody: {$ref: '#/components/requestBodies/WordWrite'}
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location:
+              schema: {type: string}
+              description: Relative URL of the new dictionary entry
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Word'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/internal/v1/sensitive-words/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      summary: Get a dictionary entry
+      description: Requires words.manage scope.
+      operationId: getWord
+      responses:
+        '200':
+          description: Dictionary entry
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Word'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    put:
+      summary: Replace an existing term
+      description: Requires words.manage scope. Does not create missing entries.
+      operationId: updateWord
+      requestBody: {$ref: '#/components/requestBodies/WordWrite'}
+      responses:
+        '200':
+          description: Updated entry
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Word'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      summary: Delete an existing entry
+      description: Requires words.manage scope. Deletions persist across restarts with PostgreSQL.
+      operationId: deleteWord
+      responses:
+        '204': {description: Deleted; no response body}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Production JWT; local profile instead accepts HTTP Basic demo credentials.
+  schemas:
+    Word:
+      type: object
+      required: [id, value]
+      properties:
+        id: {type: string, format: uuid}
+        value: {type: string, example: SELECT}
+    Problem:
+      type: object
+      properties:
+        type: {type: string}
+        title: {type: string}
+        status: {type: integer}
+        detail: {type: string}
+        instance: {type: string}
+  requestBodies:
+    WordWrite:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [value]
+            properties:
+              value: {type: string, minLength: 1, maxLength: 255, example: secret}
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+    NotFound:
+      description: Dictionary entry not found
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+    Conflict:
+      description: Duplicate normalized term or concurrent update conflict
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+    Unauthorized: {description: Missing or invalid credentials}
+    Forbidden: {description: Required scope not granted}

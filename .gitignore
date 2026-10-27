@@ -1,0 +1,8 @@
+target/
+dist/
+.idea/
+.env
+*.iml
+.DS_Store
+*.log
+.mvn/timing.properties

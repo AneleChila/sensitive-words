@@ -25,7 +25,12 @@ class OpenApiIntegrationTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.paths['/api/v1/messages/filter'].post").exists())
             .andExpect(jsonPath("$.paths['/api/internal/v1/sensitive-words/import'].post.requestBody.content['multipart/form-data']").exists())
+            .andExpect(jsonPath("$.paths['/api/internal/v1/sensitive-words/{id}'].delete.responses['204']").exists())
+            .andExpect(jsonPath("$.paths['/api/internal/v1/sensitive-words/{id}'].get.responses['404']").exists())
+            .andExpect(jsonPath("$.paths['/api/internal/v1/sensitive-words'].get.parameters[1].name").value("size"))
             .andExpect(jsonPath("$.components.schemas.FilterRequest").exists())
+            .andExpect(jsonPath("$.paths['/api/v1/messages/filter'].post.requestBody.content['application/json'].example").exists())
+            .andExpect(jsonPath("$.paths['/api/internal/v1/sensitive-words'].post.requestBody.content['application/json'].example.value").value("private phrase"))
             .andExpect(jsonPath("$.components.securitySchemes.basicAuth").exists());
     }
 }
